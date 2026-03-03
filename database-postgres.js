@@ -2,8 +2,26 @@ const { Pool } = require("pg");
 
 const useSSL =
   ["1", "true"].includes(String(process.env.PGSSL || "").toLowerCase()) || Boolean(process.env.VERCEL);
+const rawConnectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+let connectionString = rawConnectionString;
+
+if (useSSL && rawConnectionString) {
+  try {
+    // Remove ssl query params from URL so our explicit ssl config is authoritative.
+    const parsed = new URL(rawConnectionString);
+    parsed.searchParams.delete("sslmode");
+    parsed.searchParams.delete("ssl");
+    parsed.searchParams.delete("sslcert");
+    parsed.searchParams.delete("sslkey");
+    parsed.searchParams.delete("sslrootcert");
+    connectionString = parsed.toString();
+  } catch (_error) {
+    connectionString = rawConnectionString;
+  }
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  connectionString,
   ssl: useSSL ? { rejectUnauthorized: false } : false
 });
 const MAX_QTY_PER_ITEM = 10;
