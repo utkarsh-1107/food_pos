@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 
-const dataDir = path.join(__dirname, "data");
+const isVercel = Boolean(process.env.VERCEL);
+const dataDir = isVercel ? path.join("/tmp", "food-pos-data") : path.join(__dirname, "data");
 const dbPath = path.join(dataDir, "food_orders.db");
 const READ_ONLY = ["1", "true"].includes(String(process.env.READ_ONLY || "").toLowerCase());
 
