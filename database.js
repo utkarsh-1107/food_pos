@@ -172,7 +172,16 @@ async function getOrdersSchemaFlags() {
   const hasDateKey = await hasColumn("orders", "date_key");
   const hasOrderType = await hasColumn("orders", "order_type");
   const hasCustomerName = await hasColumn("orders", "customer_name");
-  return { hasItemsJson, hasDateKey, hasOrderType, hasCustomerName };
+  const hasCustomerAddress = await hasColumn("orders", "customer_address");
+  const hasOrderNotes = await hasColumn("orders", "order_notes");
+  return {
+    hasItemsJson,
+    hasDateKey,
+    hasOrderType,
+    hasCustomerName,
+    hasCustomerAddress,
+    hasOrderNotes
+  };
 }
 
 async function migrateOrdersTable() {
@@ -184,6 +193,16 @@ async function migrateOrdersTable() {
   const hasCustomerName = await hasColumn("orders", "customer_name");
   if (!hasCustomerName) {
     await run("ALTER TABLE orders ADD COLUMN customer_name TEXT");
+  }
+
+  const hasCustomerAddress = await hasColumn("orders", "customer_address");
+  if (!hasCustomerAddress) {
+    await run("ALTER TABLE orders ADD COLUMN customer_address TEXT");
+  }
+
+  const hasOrderNotes = await hasColumn("orders", "order_notes");
+  if (!hasOrderNotes) {
+    await run("ALTER TABLE orders ADD COLUMN order_notes TEXT");
   }
 }
 
@@ -279,6 +298,8 @@ async function initDatabase() {
       payment_mode TEXT NOT NULL CHECK(payment_mode IN ('cash', 'upi')),
       order_type TEXT NOT NULL DEFAULT 'dine_in',
       customer_name TEXT,
+      customer_address TEXT,
+      order_notes TEXT,
       status TEXT NOT NULL CHECK(status IN ('queued', 'preparing', 'ready', 'completed')),
       created_at TEXT NOT NULL
     )
@@ -491,6 +512,7 @@ async function getAppetizers() {
 async function fetchOrderRows(includeCompleted = false) {
   let sql = `
     SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    , customer_address, order_notes
     FROM orders
     WHERE date(created_at) = ?
   `;
@@ -564,6 +586,7 @@ async function getOrderById(orderId) {
   const row = await get(
     `
     SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    , customer_address, order_notes
     FROM orders
     WHERE id = ?
     `,
@@ -574,7 +597,14 @@ async function getOrderById(orderId) {
   return full;
 }
 
-async function createOrder({ items, payment_mode, order_type = "dine_in", customer_name = "" }) {
+async function createOrder({
+  items,
+  payment_mode,
+  order_type = "dine_in",
+  customer_name = "",
+  customer_address = "",
+  order_notes = ""
+}) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error("At least one item is required.");
   }
@@ -586,6 +616,8 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
   }
 
   const cleanCustomerName = String(customer_name || "").trim().slice(0, 80);
+  const cleanCustomerAddress = String(customer_address || "").trim().slice(0, 240);
+  const cleanOrderNotes = String(order_notes || "").trim().slice(0, 500);
 
   await run("BEGIN IMMEDIATE TRANSACTION");
   try {
@@ -682,6 +714,14 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
       orderColumns.push("customer_name");
       orderValues.push(cleanCustomerName || null);
     }
+    if (schemaFlags.hasCustomerAddress) {
+      orderColumns.push("customer_address");
+      orderValues.push(cleanCustomerAddress || null);
+    }
+    if (schemaFlags.hasOrderNotes) {
+      orderColumns.push("order_notes");
+      orderValues.push(cleanOrderNotes || null);
+    }
 
     if (schemaFlags.hasItemsJson) {
       orderColumns.push("items_json");
@@ -728,6 +768,8 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
         payment_mode,
         order_type,
         customer_name: cleanCustomerName || null,
+        customer_address: cleanCustomerAddress || null,
+        order_notes: cleanOrderNotes || null,
         status: "queued",
         created_at: createdAt
       }
@@ -747,7 +789,11 @@ async function updateOrderStatus(orderId, nextStatus) {
   if (result.changes === 0) return null;
 
   const row = await get(
-    "SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at FROM orders WHERE id = ?",
+    `
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    FROM orders
+    WHERE id = ?
+    `,
     [orderId]
   );
   const [full] = await attachOrderItems([row]);

@@ -3,6 +3,9 @@ const orderForm = document.getElementById("order-form");
 const orderTotalEl = document.getElementById("order-total");
 const messageEl = document.getElementById("message");
 const customerNameInput = document.getElementById("customer-name");
+const customerAddressInput = document.getElementById("customer-address");
+const orderNotesInput = document.getElementById("order-notes");
+const customerDetailsPanel = document.getElementById("customer-details-panel");
 
 const queuedList = document.getElementById("queued-list");
 const preparingList = document.getElementById("preparing-list");
@@ -31,6 +34,9 @@ const editMenuListEl = document.getElementById("edit-menu-list");
 const editOrderTotalEl = document.getElementById("edit-order-total");
 const saveOrderChangesBtn = document.getElementById("save-order-changes");
 const closeEditModalBtn = document.getElementById("close-edit-modal");
+const orderPreviewModal = document.getElementById("order-preview-modal");
+const orderPreviewBody = document.getElementById("order-preview-body");
+const closePreviewModalBtn = document.getElementById("close-preview-modal");
 
 const MAX_QTY_PER_ITEM = 10;
 let menuItems = [];
@@ -44,6 +50,7 @@ let paymentFilter = "";
 let orderTypeFilter = "";
 let refreshInProgress = false;
 let eventSource = null;
+const touchStartXByOrderId = new Map();
 
 const categoryOrder = [
   "Appetizers",
@@ -94,6 +101,13 @@ function formatTime(timestamp) {
 function formatOrderType(orderType) {
   if (orderType === "parcel") return "Parcel";
   return "Dine In";
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function showMessage(text, type = "success") {
@@ -438,6 +452,9 @@ function clearForm() {
   orderForm.querySelector("input[name='payment_mode'][value='cash']").checked = true;
   orderForm.querySelector("input[name='order_type'][value='dine_in']").checked = true;
   customerNameInput.value = "";
+  if (customerAddressInput) customerAddressInput.value = "";
+  if (orderNotesInput) orderNotesInput.value = "";
+  if (customerDetailsPanel) customerDetailsPanel.open = false;
   calculateTotal();
 }
 
@@ -484,6 +501,14 @@ function renderOrderCard(order) {
     actions.appendChild(editBtn);
   }
 
+  const previewBtn = document.createElement("button");
+  previewBtn.className = "btn preview-order-btn";
+  previewBtn.type = "button";
+  previewBtn.textContent = "Expand";
+  previewBtn.dataset.action = "preview";
+  previewBtn.dataset.orderId = String(order.id);
+  actions.appendChild(previewBtn);
+
   const deleteBtn = document.createElement("button");
   deleteBtn.className = "btn btn-delete";
   deleteBtn.type = "button";
@@ -494,7 +519,62 @@ function renderOrderCard(order) {
 
   card.appendChild(actions);
 
+  card.addEventListener("touchstart", (event) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    touchStartXByOrderId.set(order.id, touch.clientX);
+  });
+
+  card.addEventListener("touchend", (event) => {
+    if (window.matchMedia("(min-width: 769px)").matches) return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const startX = touchStartXByOrderId.get(order.id);
+    touchStartXByOrderId.delete(order.id);
+    if (typeof startX !== "number") return;
+    const deltaX = touch.clientX - startX;
+    if (Math.abs(deltaX) >= 60) {
+      openOrderPreview(order);
+    }
+  });
+
   return card;
+}
+
+function openOrderPreview(order) {
+  if (!orderPreviewModal || !orderPreviewBody) return;
+  const customer = order.customer_name ? escapeHtml(order.customer_name) : "Not provided";
+  const address = order.customer_address ? escapeHtml(order.customer_address) : "Not provided";
+  const notes = order.order_notes ? escapeHtml(order.order_notes) : "Not provided";
+  const items = (order.items || [])
+    .map((item) => `<li>${escapeHtml(item.name)} x ${item.quantity}</li>`)
+    .join("");
+
+  orderPreviewBody.innerHTML = `
+    <p><strong>Token:</strong> #${order.token_number}</p>
+    <p><strong>Status:</strong> ${escapeHtml(order.status)}</p>
+    <p><strong>Payment:</strong> ${escapeHtml(String(order.payment_mode || "").toUpperCase())}</p>
+    <p><strong>Order Type:</strong> ${formatOrderType(order.order_type)}</p>
+    <p><strong>Total:</strong> ${formatCurrency(order.total_amount)}</p>
+    <p><strong>Time:</strong> ${formatTime(order.created_at)}</p>
+    <p><strong>Customer:</strong> ${customer}</p>
+    <p><strong>Address:</strong> ${address}</p>
+    <p><strong>Notes:</strong> ${notes}</p>
+    <div>
+      <strong>Items:</strong>
+      <ul class="order-items">${items}</ul>
+    </div>
+  `;
+
+  orderPreviewModal.classList.remove("hidden");
+  orderPreviewModal.setAttribute("aria-hidden", "false");
+}
+
+function closeOrderPreview() {
+  if (!orderPreviewModal || !orderPreviewBody) return;
+  orderPreviewModal.classList.add("hidden");
+  orderPreviewModal.setAttribute("aria-hidden", "true");
+  orderPreviewBody.innerHTML = "";
 }
 
 async function handleOrderCardAction(event) {
@@ -505,6 +585,13 @@ async function handleOrderCardAction(event) {
   if (!Number.isInteger(orderId) || orderId <= 0) return;
 
   try {
+    if (action === "preview") {
+      const selected = allOrders.find((item) => Number(item.id) === orderId);
+      if (selected) {
+        openOrderPreview(selected);
+      }
+      return;
+    }
     if (action === "edit") {
       await openEditOrderModal(orderId);
       return;
@@ -849,6 +936,8 @@ async function createOrder(event) {
   const paymentMode = orderForm.querySelector("input[name='payment_mode']:checked").value;
   const orderType = orderForm.querySelector("input[name='order_type']:checked").value;
   const customerName = customerNameInput.value.trim();
+  const customerAddress = customerAddressInput ? customerAddressInput.value.trim() : "";
+  const orderNotes = orderNotesInput ? orderNotesInput.value.trim() : "";
 
   const response = await fetch("/orders", {
     method: "POST",
@@ -857,7 +946,9 @@ async function createOrder(event) {
       items,
       payment_mode: paymentMode,
       order_type: orderType,
-      customer_name: customerName
+      customer_name: customerName,
+      customer_address: customerAddress,
+      order_notes: orderNotes
     })
   });
 
@@ -1097,6 +1188,20 @@ async function init() {
         handleEditModalAction(event);
         if (event.target === editOrderModal) {
           closeEditOrderModal();
+        }
+      });
+    }
+
+    if (closePreviewModalBtn) {
+      closePreviewModalBtn.addEventListener("click", () => {
+        closeOrderPreview();
+      });
+    }
+
+    if (orderPreviewModal) {
+      orderPreviewModal.addEventListener("click", (event) => {
+        if (event.target === orderPreviewModal) {
+          closeOrderPreview();
         }
       });
     }

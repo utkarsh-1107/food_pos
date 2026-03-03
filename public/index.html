@@ -29,10 +29,21 @@
           </label>
         </div>
 
-        <div class="customer-block">
-          <h3>Customer Name (Optional)</h3>
-          <input id="customer-name" type="text" maxlength="80" placeholder="Enter customer name" />
-        </div>
+        <details id="customer-details-panel" class="customer-panel">
+          <summary>Customer / Address / Notes</summary>
+          <div class="customer-block">
+            <h3>Customer Name (Optional)</h3>
+            <input id="customer-name" type="text" maxlength="80" placeholder="Enter customer name" />
+          </div>
+          <div class="customer-block">
+            <h3>Address (Optional)</h3>
+            <textarea id="customer-address" maxlength="240" rows="2" placeholder="Enter address"></textarea>
+          </div>
+          <div class="customer-block">
+            <h3>Notes For Preparing (Optional)</h3>
+            <textarea id="order-notes" maxlength="500" rows="2" placeholder="Eg: less spicy, no onions"></textarea>
+          </div>
+        </details>
 
         <div class="payment-block">
           <h3>Payment Mode</h3>
@@ -150,7 +161,14 @@
     </div>
   </div>
 
+  <div id="order-preview-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content preview-modal-content">
+      <button id="close-preview-modal" class="preview-close-btn" type="button" aria-label="Close preview">x</button>
+      <h3>Order Preview</h3>
+      <div id="order-preview-body" class="order-preview-body"></div>
+    </div>
+  </div>
+
   <script src="/script.js"></script>
 </body>
 </html>
-

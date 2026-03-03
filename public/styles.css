@@ -279,6 +279,44 @@ body {
   border-radius: 6px;
 }
 
+.customer-panel {
+  margin-top: 12px;
+  border: 1px solid #E3E3E3;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.customer-panel summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  text-transform: uppercase;
+  list-style: none;
+}
+
+.customer-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.customer-panel summary::after {
+  content: " +";
+}
+
+.customer-panel[open] summary::after {
+  content: " -";
+}
+
+.customer-block textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #D8D8D8;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
 .customer-block input:focus {
   outline: none;
   border-color: var(--primary);
@@ -339,6 +377,14 @@ body {
 
 .edit-order-btn:hover {
   background: #0D47A1;
+}
+
+.preview-order-btn {
+  background: #374151;
+}
+
+.preview-order-btn:hover {
+  background: #1F2937;
 }
 
 .form-actions {
@@ -714,6 +760,33 @@ body {
   gap: 8px;
 }
 
+.preview-modal-content {
+  position: relative;
+  width: min(460px, 100%);
+}
+
+.preview-close-btn {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #D1D5DB;
+  border-radius: 999px;
+  background: #FFFFFF;
+  cursor: pointer;
+  font-weight: 700;
+  color: #4B5563;
+}
+
+.preview-close-btn:hover {
+  background: #F3F4F6;
+}
+
+.order-preview-body p {
+  margin: 6px 0;
+}
+
 
 @media (max-width: 1024px) {
   .app-main {
@@ -790,5 +863,13 @@ body {
 
   .modal-actions .btn {
     flex: 1;
+  }
+
+  .order-card {
+    touch-action: pan-y;
+  }
+
+  .preview-order-btn {
+    display: none;
   }
 }

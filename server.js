@@ -135,8 +135,15 @@ app.post("/orders", async (req, res) => {
     if (READ_ONLY) {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
-    const { items, payment_mode, order_type, customer_name } = req.body;
-    const order = await db.createOrder({ items, payment_mode, order_type, customer_name });
+    const { items, payment_mode, order_type, customer_name, customer_address, order_notes } = req.body;
+    const order = await db.createOrder({
+      items,
+      payment_mode,
+      order_type,
+      customer_name,
+      customer_address,
+      order_notes
+    });
     broadcastEvent("orders_changed", { action: "created", order_id: order.id });
     res.status(201).json(order);
   } catch (error) {

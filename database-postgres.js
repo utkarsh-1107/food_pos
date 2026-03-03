@@ -224,6 +224,8 @@ async function initDatabase() {
       payment_mode TEXT NOT NULL CHECK(payment_mode IN ('cash', 'upi')),
       order_type TEXT NOT NULL DEFAULT 'dine_in',
       customer_name TEXT,
+      customer_address TEXT,
+      order_notes TEXT,
       status TEXT NOT NULL CHECK(status IN ('queued', 'preparing', 'ready', 'completed')),
       created_at TIMESTAMP NOT NULL,
       order_date DATE NOT NULL
@@ -232,6 +234,8 @@ async function initDatabase() {
 
   // Backfill/migrate older schema that may be missing order_date.
   await run("ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_date DATE");
+  await run("ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_address TEXT");
+  await run("ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_notes TEXT");
   await run("UPDATE orders SET order_date = DATE(created_at) WHERE order_date IS NULL");
   await run("ALTER TABLE orders ALTER COLUMN order_date SET NOT NULL");
 
@@ -435,7 +439,7 @@ async function getAppetizers() {
 
 async function fetchOrderRows(includeCompleted = false) {
   let sql = `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
     FROM orders
     WHERE order_date = $1
   `;
@@ -511,7 +515,7 @@ async function getOrders(includeCompleted = false) {
 async function getOrderById(orderId) {
   const row = await get(
     `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
     FROM orders
     WHERE id = $1
     `,
@@ -522,7 +526,10 @@ async function getOrderById(orderId) {
   return full;
 }
 
-async function createOrder({ items, payment_mode, order_type = "dine_in", customer_name = "" }, retriesLeft = 2) {
+async function createOrder(
+  { items, payment_mode, order_type = "dine_in", customer_name = "", customer_address = "", order_notes = "" },
+  retriesLeft = 2
+) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error("At least one item is required.");
   }
@@ -534,6 +541,8 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
   }
 
   const cleanCustomerName = String(customer_name || "").trim().slice(0, 80);
+  const cleanCustomerAddress = String(customer_address || "").trim().slice(0, 240);
+  const cleanOrderNotes = String(order_notes || "").trim().slice(0, 500);
 
   const orderDate = todayIN();
 
@@ -621,11 +630,22 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
     const createdAt = toINDateTime();
     const insertOrder = await get(
       `
-      INSERT INTO orders (token_number, total_amount, payment_mode, order_type, customer_name, status, created_at, order_date)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO orders (token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at, order_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id
       `,
-      [tokenNumber, totalAmount, payment_mode, order_type, cleanCustomerName || null, "queued", createdAt, orderDate]
+      [
+        tokenNumber,
+        totalAmount,
+        payment_mode,
+        order_type,
+        cleanCustomerName || null,
+        cleanCustomerAddress || null,
+        cleanOrderNotes || null,
+        "queued",
+        createdAt,
+        orderDate
+      ]
     );
 
     for (const item of normalizedItems) {
@@ -655,6 +675,8 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
         payment_mode,
         order_type,
         customer_name: cleanCustomerName || null,
+        customer_address: cleanCustomerAddress || null,
+        order_notes: cleanOrderNotes || null,
         status: "queued",
         created_at: createdAt
       }
@@ -668,7 +690,7 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
       error.code === "23505" &&
       error.constraint === "idx_orders_daily_token_unique"
     ) {
-      return createOrder({ items, payment_mode, order_type, customer_name }, retriesLeft - 1);
+      return createOrder({ items, payment_mode, order_type, customer_name, customer_address, order_notes }, retriesLeft - 1);
     }
     throw error;
   }
@@ -682,7 +704,11 @@ async function updateOrderStatus(orderId, nextStatus) {
   if (result.rowCount === 0) return null;
 
   const row = await get(
-    "SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at FROM orders WHERE id = $1",
+    `
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    FROM orders
+    WHERE id = $1
+    `,
     [orderId]
   );
   const [full] = await attachOrderItems([row]);
