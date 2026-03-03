@@ -392,6 +392,24 @@ body {
   font-weight: 700;
 }
 
+.order-card .btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.order-card .btn + .btn {
+  margin-top: 6px;
+  margin-left: 0;
+}
+
+.order-card .btn-delete {
+  margin-top: 6px;
+}
+
 .empty {
   color: var(--muted);
   font-style: italic;
