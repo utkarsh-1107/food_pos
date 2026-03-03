@@ -560,6 +560,20 @@ async function getOrders(includeCompleted = false) {
   return attachOrderItems(rows);
 }
 
+async function getOrderById(orderId) {
+  const row = await get(
+    `
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    FROM orders
+    WHERE id = ?
+    `,
+    [orderId]
+  );
+  if (!row) return null;
+  const [full] = await attachOrderItems([row]);
+  return full;
+}
+
 async function createOrder({ items, payment_mode, order_type = "dine_in", customer_name = "" }) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error("At least one item is required.");
@@ -797,12 +811,134 @@ async function deleteOrder(orderId) {
   }
 }
 
+async function editOrder(orderId, items) {
+  if (!Array.isArray(items)) {
+    throw new Error("Items payload is required.");
+  }
+
+  const existingOrder = await get("SELECT id FROM orders WHERE id = ?", [orderId]);
+  if (!existingOrder) {
+    return null;
+  }
+
+  await run("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const menuRows = await all("SELECT id, price FROM menu_items");
+    const menuMap = new Map(menuRows.map((row) => [row.id, row]));
+
+    const appetizerRows = await all(
+      `
+      SELECT
+        av.id AS variant_id,
+        av.price
+      FROM appetizer_variants av
+      `
+    );
+    const appetizerMap = new Map(appetizerRows.map((row) => [row.variant_id, row]));
+
+    const normalizedItems = [];
+    let totalAmount = 0;
+
+    for (const rawItem of items) {
+      const quantity = Number(rawItem.quantity);
+      if (!Number.isInteger(quantity) || quantity < 0 || quantity > MAX_QTY_PER_ITEM) {
+        throw new Error(`Quantity must be between 0 and ${MAX_QTY_PER_ITEM}.`);
+      }
+      if (quantity === 0) continue;
+
+      const itemType =
+        rawItem.type === "appetizer" || rawItem.appetizer_variant_id
+          ? "appetizer"
+          : "menu_item";
+
+      if (itemType === "appetizer") {
+        const variantId = Number(rawItem.appetizer_variant_id || rawItem.id);
+        if (!Number.isInteger(variantId)) {
+          throw new Error("Invalid appetizer item id.");
+        }
+        const variant = appetizerMap.get(variantId);
+        if (!variant) {
+          throw new Error(`Appetizer variant not found: ${variantId}`);
+        }
+        const lineTotal = Number(variant.price) * quantity;
+        totalAmount += lineTotal;
+        normalizedItems.push({
+          item_type: "appetizer",
+          menu_item_id: null,
+          appetizer_variant_id: variantId,
+          quantity,
+          line_total: lineTotal
+        });
+        continue;
+      }
+
+      const menuItemId = Number(rawItem.menu_item_id || rawItem.id);
+      if (!Number.isInteger(menuItemId)) {
+        throw new Error("Invalid menu item id.");
+      }
+      const menuItem = menuMap.get(menuItemId);
+      if (!menuItem) {
+        throw new Error(`Menu item not found: ${menuItemId}`);
+      }
+      const lineTotal = Number(menuItem.price) * quantity;
+      totalAmount += lineTotal;
+      normalizedItems.push({
+        item_type: "menu_item",
+        menu_item_id: menuItemId,
+        appetizer_variant_id: null,
+        quantity,
+        line_total: lineTotal
+      });
+    }
+
+    if (normalizedItems.length === 0) {
+      throw new Error("At least one item with quantity above 0 is required.");
+    }
+
+    await run("DELETE FROM order_items WHERE order_id = ?", [orderId]);
+    for (const item of normalizedItems) {
+      await run(
+        `
+        INSERT INTO order_items (order_id, item_type, menu_item_id, appetizer_variant_id, quantity, line_total)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          orderId,
+          item.item_type,
+          item.menu_item_id,
+          item.appetizer_variant_id,
+          item.quantity,
+          item.line_total
+        ]
+      );
+    }
+
+    const schemaFlags = await getOrdersSchemaFlags();
+    const updateFragments = ["total_amount = ?"];
+    const updateParams = [totalAmount];
+    if (schemaFlags.hasItemsJson) {
+      updateFragments.push("items_json = ?");
+      updateParams.push(JSON.stringify(normalizedItems));
+    }
+    updateParams.push(orderId);
+    await run(`UPDATE orders SET ${updateFragments.join(", ")} WHERE id = ?`, updateParams);
+
+    await run("COMMIT");
+    return getOrderById(orderId);
+  } catch (error) {
+    await run("ROLLBACK");
+    throw error;
+  }
+}
+
 module.exports = {
   initDatabase,
   getMenu,
   getAppetizers,
   getOrders,
+  getOrderById,
   createOrder,
+  editOrder,
   updateOrderStatus,
   getStats,
   resetDay,

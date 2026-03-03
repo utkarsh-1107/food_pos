@@ -84,6 +84,24 @@ app.get("/orders", async (req, res) => {
   }
 });
 
+app.get("/orders/:id", async (req, res) => {
+  try {
+    if (!(await ensureDatabaseReady(res))) return;
+    const orderId = Number(req.params.id);
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: "Invalid order id." });
+    }
+
+    const order = await db.getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    return res.json(order);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to fetch order." });
+  }
+});
+
 app.post("/orders", async (req, res) => {
   try {
     if (!(await ensureDatabaseReady(res))) return;
@@ -118,6 +136,30 @@ app.put("/orders/:id/status", async (req, res) => {
     return res.json(updated);
   } catch (error) {
     return res.status(400).json({ error: error.message || "Failed to update order status." });
+  }
+});
+
+app.put("/orders/:id/edit", async (req, res) => {
+  try {
+    if (!(await ensureDatabaseReady(res))) return;
+    if (READ_ONLY) {
+      return res.status(405).json({ error: "Read-only mode is enabled." });
+    }
+
+    const orderId = Number(req.params.id);
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: "Invalid order id." });
+    }
+
+    const { items } = req.body;
+    const updated = await db.editOrder(orderId, items);
+    if (!updated) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Failed to edit order." });
   }
 });
 

@@ -20,12 +20,20 @@ const statUpi = document.getElementById("stat-upi");
 const statGrand = document.getElementById("stat-grand");
 const resetDayBtn = document.getElementById("reset-day-btn");
 const clearCartBtn = document.getElementById("clear-cart-btn");
+const editOrderModal = document.getElementById("edit-order-modal");
+const editOrderItemsEl = document.getElementById("edit-order-items");
+const editMenuListEl = document.getElementById("edit-menu-list");
+const editOrderTotalEl = document.getElementById("edit-order-total");
+const saveOrderChangesBtn = document.getElementById("save-order-changes");
+const closeEditModalBtn = document.getElementById("close-edit-modal");
 
 const MAX_QTY_PER_ITEM = 10;
 let menuItems = [];
 let allOrders = [];
 let currentBoardTab = "active";
 let cachedAdminPin = "";
+let currentEditOrderId = null;
+let editCart = [];
 
 const categoryOrder = [
   "Appetizers",
@@ -125,6 +133,58 @@ function updateAppetizerRowPrice(rowEl) {
   priceEl.textContent = formatCurrency(Number(checked.dataset.price || 0));
 }
 
+function createQtyStepper(inputClass, max, dataset = {}) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "qty-stepper";
+
+  const minusBtn = document.createElement("button");
+  minusBtn.type = "button";
+  minusBtn.textContent = "-";
+
+  const valueEl = document.createElement("span");
+  valueEl.className = "qty-value";
+  valueEl.textContent = "0";
+
+  const plusBtn = document.createElement("button");
+  plusBtn.type = "button";
+  plusBtn.textContent = "+";
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.max = String(max);
+  input.value = "0";
+  input.className = inputClass;
+  Object.entries(dataset).forEach(([key, value]) => {
+    input.dataset[key] = String(value);
+  });
+  input.style.display = "none";
+
+  const setValue = (raw) => {
+    let value = Number(raw);
+    if (!Number.isFinite(value)) value = 0;
+    if (value < 0) value = 0;
+    if (value > max) value = max;
+    input.value = String(value);
+    valueEl.textContent = String(value);
+    calculateTotal();
+  };
+
+  minusBtn.addEventListener("click", () => {
+    setValue((Number(input.value) || 0) - 1);
+  });
+  plusBtn.addEventListener("click", () => {
+    setValue((Number(input.value) || 0) + 1);
+  });
+
+  wrapper.appendChild(minusBtn);
+  wrapper.appendChild(valueEl);
+  wrapper.appendChild(plusBtn);
+  wrapper.appendChild(input);
+
+  return { wrapper, input, setValue };
+}
+
 function renderAppetizerRows(appetizers, sectionEl) {
   const groupedAppetizers = new Map();
 
@@ -142,7 +202,7 @@ function renderAppetizerRows(appetizers, sectionEl) {
 
   Array.from(groupedAppetizers.entries()).forEach(([groupName, variants], rowIndex) => {
     const row = document.createElement("div");
-    row.className = "appetizer-row";
+    row.className = "appetizer-row menu-card";
     row.dataset.groupKey = groupName;
 
     const main = document.createElement("div");
@@ -191,21 +251,8 @@ function renderAppetizerRows(appetizers, sectionEl) {
     const qtyWrap = document.createElement("div");
     qtyWrap.className = "qty-control";
     qtyWrap.innerHTML = "<label>Qty</label>";
-
-    const qtyInput = document.createElement("input");
-    qtyInput.type = "number";
-    qtyInput.min = "0";
-    qtyInput.max = String(MAX_QTY_PER_ITEM);
-    qtyInput.value = "0";
-    qtyInput.className = "appetizer-qty";
-    qtyInput.addEventListener("input", () => {
-      const raw = Number(qtyInput.value) || 0;
-      if (raw < 0) qtyInput.value = "0";
-      if (raw > MAX_QTY_PER_ITEM) qtyInput.value = String(MAX_QTY_PER_ITEM);
-      calculateTotal();
-    });
-
-    qtyWrap.appendChild(qtyInput);
+    const appetizerStepper = createQtyStepper("appetizer-qty", MAX_QTY_PER_ITEM);
+    qtyWrap.appendChild(appetizerStepper.wrapper);
 
     main.appendChild(title);
     main.appendChild(tabs);
@@ -222,7 +269,7 @@ function renderAppetizerRows(appetizers, sectionEl) {
 function renderRegularCategory(items, sectionEl) {
   items.forEach((item) => {
     const row = document.createElement("div");
-    row.className = "menu-item";
+    row.className = "menu-item menu-card";
 
     const info = document.createElement("div");
     info.className = "menu-item-info";
@@ -231,27 +278,14 @@ function renderRegularCategory(items, sectionEl) {
     const qty = document.createElement("div");
     qty.className = "qty-control";
     qty.innerHTML = "<label>Qty</label>";
-
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.max = String(MAX_QTY_PER_ITEM);
-    input.value = "0";
-    input.className = "menu-item-qty";
-    input.dataset.id = String(item.id);
-    input.dataset.price = String(item.price);
-    input.dataset.type = item.type || "menu_item";
-    if (item.group_id) input.dataset.groupId = String(item.group_id);
-    if (item.variant_id) input.dataset.variantId = String(item.variant_id);
-
-    input.addEventListener("input", () => {
-      const raw = Number(input.value) || 0;
-      if (raw < 0) input.value = "0";
-      if (raw > MAX_QTY_PER_ITEM) input.value = String(MAX_QTY_PER_ITEM);
-      calculateTotal();
+    const stepper = createQtyStepper("menu-item-qty", MAX_QTY_PER_ITEM, {
+      id: String(item.id),
+      price: String(item.price),
+      type: item.type || "menu_item",
+      ...(item.group_id ? { groupId: String(item.group_id) } : {}),
+      ...(item.variant_id ? { variantId: String(item.variant_id) } : {})
     });
-
-    qty.appendChild(input);
+    qty.appendChild(stepper.wrapper);
     row.appendChild(info);
     row.appendChild(qty);
     sectionEl.appendChild(row);
@@ -396,34 +430,297 @@ function renderOrderCard(order) {
 
   const nextStatus = getNextStatus(order.status);
   const buttonLabel = getNextStatusLabel(order.status);
+  const actions = document.createElement("div");
+  actions.className = "order-actions";
+
   if (nextStatus && buttonLabel) {
     const actionBtn = document.createElement("button");
     actionBtn.className = "btn stage-btn";
+    actionBtn.type = "button";
     actionBtn.textContent = buttonLabel;
-    actionBtn.addEventListener("click", async () => {
-      try {
-        await updateStatus(order.id, nextStatus);
-      } catch (error) {
-        showMessage(error.message, "error");
-      }
-    });
-    card.appendChild(actionBtn);
+    actionBtn.dataset.action = "status";
+    actionBtn.dataset.orderId = String(order.id);
+    actionBtn.dataset.nextStatus = nextStatus;
+    actions.appendChild(actionBtn);
+  }
+
+  if (order.status === "queued") {
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn edit-order-btn";
+    editBtn.type = "button";
+    editBtn.textContent = "Edit";
+    editBtn.dataset.action = "edit";
+    editBtn.dataset.orderId = String(order.id);
+    actions.appendChild(editBtn);
   }
 
   const deleteBtn = document.createElement("button");
   deleteBtn.className = "btn btn-delete";
   deleteBtn.type = "button";
   deleteBtn.textContent = "Delete Order";
-  deleteBtn.addEventListener("click", async () => {
-    try {
-      await deleteOrder(order.id);
-    } catch (error) {
-      showMessage(error.message, "error");
-    }
-  });
-  card.appendChild(deleteBtn);
+  deleteBtn.dataset.action = "delete";
+  deleteBtn.dataset.orderId = String(order.id);
+  actions.appendChild(deleteBtn);
+
+  card.appendChild(actions);
 
   return card;
+}
+
+async function handleOrderCardAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const orderId = Number(button.dataset.orderId);
+  if (!Number.isInteger(orderId) || orderId <= 0) return;
+
+  try {
+    if (action === "edit") {
+      await openEditOrderModal(orderId);
+      return;
+    }
+    if (action === "delete") {
+      await deleteOrder(orderId);
+      return;
+    }
+    if (action === "status") {
+      const nextStatus = button.dataset.nextStatus;
+      if (!nextStatus) return;
+      await updateStatus(orderId, nextStatus);
+    }
+  } catch (error) {
+    showMessage(error.message, "error");
+  }
+}
+
+function closeEditOrderModal() {
+  currentEditOrderId = null;
+  editCart = [];
+  editOrderItemsEl.innerHTML = "";
+  if (editMenuListEl) editMenuListEl.innerHTML = "";
+  if (editOrderTotalEl) editOrderTotalEl.textContent = formatCurrency(0);
+  editOrderModal.classList.add("hidden");
+  editOrderModal.setAttribute("aria-hidden", "true");
+}
+
+function toEditCartItem(item) {
+  const quantity = Number(item.quantity) || 0;
+  const unitPrice = quantity > 0 ? Number(item.line_total || 0) / quantity : 0;
+  if ((item.type || "menu_item") === "appetizer") {
+    return {
+      key: `appetizer:${item.variant_id}`,
+      type: "appetizer",
+      appetizer_variant_id: Number(item.variant_id),
+      name: item.name,
+      price: unitPrice,
+      quantity
+    };
+  }
+  return {
+    key: `menu_item:${item.menu_item_id}`,
+    type: "menu_item",
+    menu_item_id: Number(item.menu_item_id),
+    name: item.name,
+    price: unitPrice,
+    quantity
+  };
+}
+
+function updateEditTotal() {
+  const total = editCart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
+  if (editOrderTotalEl) {
+    editOrderTotalEl.textContent = formatCurrency(total);
+  }
+}
+
+function renderEditCart() {
+  editOrderItemsEl.innerHTML = "";
+  editCart.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "edit-row";
+
+    const label = document.createElement("span");
+    label.className = "edit-row-name";
+    label.textContent = item.name;
+
+    const controls = document.createElement("div");
+    controls.className = "edit-qty-stepper";
+    controls.innerHTML = `
+      <button type="button" data-edit-action="decrease" data-index="${index}">-</button>
+      <span>${item.quantity}</span>
+      <button type="button" data-edit-action="increase" data-index="${index}">+</button>
+      <button type="button" class="remove-item-btn" data-edit-action="remove" data-index="${index}">x</button>
+    `;
+
+    row.appendChild(label);
+    row.appendChild(controls);
+    editOrderItemsEl.appendChild(row);
+  });
+  updateEditTotal();
+}
+
+function renderEditMenuList() {
+  if (!editMenuListEl) return;
+  editMenuListEl.innerHTML = "";
+  menuItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "edit-menu-row";
+    row.innerHTML = `
+      <span>${item.name} - ${formatCurrency(item.price)}</span>
+      <button class="btn add-item-btn" type="button" data-edit-action="add" data-menu-id="${item.id}">Add</button>
+    `;
+    editMenuListEl.appendChild(row);
+  });
+}
+
+function findMenuItemById(menuId) {
+  return menuItems.find((item) => String(item.id) === String(menuId));
+}
+
+function addToEditCart(menuId) {
+  const menuItem = findMenuItemById(menuId);
+  if (!menuItem) return;
+
+  const type = menuItem.type === "appetizer" ? "appetizer" : "menu_item";
+  const key = type === "appetizer" ? `appetizer:${menuItem.variant_id}` : `menu_item:${menuItem.id}`;
+  const existing = editCart.find((item) => item.key === key);
+  if (existing) {
+    existing.quantity = Math.min(MAX_QTY_PER_ITEM, Number(existing.quantity) + 1);
+  } else if (type === "appetizer") {
+    editCart.push({
+      key,
+      type,
+      appetizer_variant_id: Number(menuItem.variant_id),
+      name: menuItem.name,
+      price: Number(menuItem.price),
+      quantity: 1
+    });
+  } else {
+    editCart.push({
+      key,
+      type,
+      menu_item_id: Number(menuItem.id),
+      name: menuItem.name,
+      price: Number(menuItem.price),
+      quantity: 1
+    });
+  }
+  renderEditCart();
+}
+
+function changeEditQty(index, delta) {
+  const target = editCart[index];
+  if (!target) return;
+  target.quantity = Number(target.quantity) + Number(delta);
+  if (target.quantity <= 0) {
+    editCart.splice(index, 1);
+  } else if (target.quantity > MAX_QTY_PER_ITEM) {
+    target.quantity = MAX_QTY_PER_ITEM;
+  }
+  renderEditCart();
+}
+
+function handleEditModalAction(event) {
+  const actionBtn = event.target.closest("button[data-edit-action]");
+  if (!actionBtn) return;
+  const action = actionBtn.dataset.editAction;
+  if (action === "add") {
+    addToEditCart(actionBtn.dataset.menuId);
+    return;
+  }
+  const index = Number(actionBtn.dataset.index);
+  if (!Number.isInteger(index)) return;
+  if (action === "increase") {
+    changeEditQty(index, 1);
+    return;
+  }
+  if (action === "decrease") {
+    changeEditQty(index, -1);
+    return;
+  }
+  if (action === "remove") {
+    editCart.splice(index, 1);
+    renderEditCart();
+  }
+}
+
+async function openEditOrderModal(orderId) {
+  if (!editOrderModal || !editOrderItemsEl) {
+    throw new Error("Edit modal is unavailable. Please hard refresh the page.");
+  }
+
+  const response = await fetch(`/orders/${orderId}`);
+  const raw = await response.text();
+  let payload = {};
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    payload = { error: raw };
+  }
+  if (!response.ok) {
+    if (response.status === 404 && String(payload.error || "").includes("Cannot GET")) {
+      throw new Error("Edit endpoint unavailable on running server. Please restart server.");
+    }
+    throw new Error(payload.error || "Failed to load order.");
+  }
+
+  currentEditOrderId = orderId;
+  editCart = payload.items.map(toEditCartItem);
+  renderEditCart();
+  renderEditMenuList();
+  editOrderModal.classList.remove("hidden");
+  editOrderModal.setAttribute("aria-hidden", "false");
+}
+
+async function saveOrderChanges() {
+  if (!currentEditOrderId) return;
+  if (!editOrderItemsEl) {
+    throw new Error("Edit modal is unavailable. Please hard refresh the page.");
+  }
+  if (editCart.length === 0) {
+    throw new Error("At least one item is required.");
+  }
+
+  const items = editCart.map((entry) => {
+    const quantity = Number(entry.quantity) || 0;
+    const type = entry.type === "appetizer" ? "appetizer" : "menu_item";
+    if (type === "appetizer") {
+      return {
+        type,
+        appetizer_variant_id: Number(entry.appetizer_variant_id),
+        quantity
+      };
+    }
+    return {
+      type,
+      menu_item_id: Number(entry.menu_item_id),
+      quantity
+    };
+  });
+
+  const response = await fetch(`/orders/${currentEditOrderId}/edit`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+
+  const raw = await response.text();
+  let payload = {};
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    payload = { error: raw };
+  }
+  if (!response.ok) {
+    if (response.status === 404 && String(payload.error || "").includes("Cannot PUT")) {
+      throw new Error("Edit endpoint unavailable on running server. Please restart server.");
+    }
+    throw new Error(payload.error || "Failed to save order changes.");
+  }
+
+  closeEditOrderModal();
+  showMessage("Order updated successfully.", "success");
+  await Promise.all([fetchOrders(), fetchStats()]);
 }
 
 function renderColumn(targetEl, data) {
@@ -633,6 +930,32 @@ async function init() {
       clearForm();
       showMessage("Cart cleared.", "success");
     });
+
+    queuedList.addEventListener("click", handleOrderCardAction);
+    preparingList.addEventListener("click", handleOrderCardAction);
+    readyList.addEventListener("click", handleOrderCardAction);
+    completedList.addEventListener("click", handleOrderCardAction);
+
+    if (closeEditModalBtn && saveOrderChangesBtn && editOrderModal) {
+      closeEditModalBtn.addEventListener("click", () => {
+        closeEditOrderModal();
+      });
+
+      saveOrderChangesBtn.addEventListener("click", async () => {
+        try {
+          await saveOrderChanges();
+        } catch (error) {
+          showMessage(error.message, "error");
+        }
+      });
+
+      editOrderModal.addEventListener("click", (event) => {
+        handleEditModalAction(event);
+        if (event.target === editOrderModal) {
+          closeEditOrderModal();
+        }
+      });
+    }
 
     setInterval(async () => {
       try {

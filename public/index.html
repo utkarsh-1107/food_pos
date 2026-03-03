@@ -115,6 +115,24 @@
     <button id="reset-day-btn" class="btn btn-danger">Reset Current Day</button>
   </section>
 
+  <div id="edit-order-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content large">
+      <h3>Edit Order</h3>
+      <div id="edit-order-items" class="edit-items"></div>
+
+      <h4 class="edit-subtitle">Add More Items</h4>
+      <div id="edit-menu-list" class="edit-menu-list"></div>
+
+      <div class="edit-footer">
+        <span>Total: <strong id="edit-order-total">Rs 0.00</strong></span>
+        <div class="modal-actions">
+          <button id="close-edit-modal" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="save-order-changes" class="btn btn-primary" type="button">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/script.js"></script>
 </body>
 </html>
