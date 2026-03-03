@@ -1,19 +1,11 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const { Pool } = require("pg");
 
 const useSSL =
-  ["1", "true"].includes(String(process.env.PGSSL || "").toLowerCase()) ||
-  Boolean(process.env.VERCEL);
-
+  ["1", "true"].includes(String(process.env.PGSSL || "").toLowerCase()) || Boolean(process.env.VERCEL);
 const pool = new Pool({
-  host: "aws-1-us-east-1.pooler.supabase.com",
-  port: 6543,
-  user: "postgres.rkxfpfmweurzusfrzeqc",
-  password: "Qs_z*Fr!v2Rwc-2",
-  database: "postgres",
-  ssl: {
-    rejectUnauthorized: false,
-  },});
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: useSSL ? { rejectUnauthorized: false } : false
+});
 const MAX_QTY_PER_ITEM = 10;
 
 async function query(sql, params = []) {
@@ -570,7 +562,7 @@ async function createOrder({ items, payment_mode, order_type = "dine_in", custom
     const insertOrder = await get(
       `
       INSERT INTO orders (token_number, total_amount, payment_mode, order_type, customer_name, status, created_at, order_date)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id
       `,
       [tokenNumber, totalAmount, payment_mode, order_type, cleanCustomerName || null, "queued", createdAt, orderDate]
