@@ -24,7 +24,10 @@ const initPromise = (SKIP_DB_INIT ? Promise.resolve() : db.initDatabase()).catch
 async function ensureDatabaseReady(res) {
   await initPromise;
   if (!initError) return true;
-  res.status(500).json({ error: "Database initialization failed." });
+  res.status(500).json({
+    error: "Database initialization failed.",
+    detail: initError.message || String(initError)
+  });
   return false;
 }
 
@@ -35,7 +38,10 @@ app.get("/menu", async (req, res) => {
     res.json(menu);
   } catch (error) {
     console.error("GET /menu failed:", error);
-    res.status(500).json({ error: "Failed to fetch menu." });
+    res.status(500).json({
+      error: "Failed to fetch menu.",
+      detail: error.message || String(error)
+    });
   }
 });
 
