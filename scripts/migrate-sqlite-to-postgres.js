@@ -18,7 +18,7 @@ function sqliteAll(db, sql, params = []) {
 }
 
 async function ensureEmptyOrAllowed() {
-  const existing = await pgDb.query("SELECT COUNT(*)::int AS count FROM orders");
+  const existing = await pgDb.query("SELECT COUNT(*)::int AS count FROM categories");
   const count = existing.rows[0]?.count || 0;
   if (count > 0 && !["1", "true"].includes(String(process.env.ALLOW_OVERWRITE || "").toLowerCase())) {
     throw new Error("Postgres already has data. Set ALLOW_OVERWRITE=1 to overwrite.");
