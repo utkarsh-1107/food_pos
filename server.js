@@ -8,7 +8,7 @@ const db =
 const app = express();
 const PORT = process.env.PORT || 3000;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const SKIP_DB_INIT = IS_VERCEL || ["1", "true"].includes(String(process.env.SKIP_DB_INIT || "").toLowerCase());
+const SKIP_DB_INIT = ["1", "true"].includes(String(process.env.SKIP_DB_INIT || "").toLowerCase());
 const READ_ONLY = ["1", "true"].includes(String(process.env.READ_ONLY || "").toLowerCase());
 const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
 
@@ -24,10 +24,6 @@ const initPromise = (SKIP_DB_INIT ? Promise.resolve() : db.initDatabase()).catch
 async function ensureDatabaseReady(res) {
   await initPromise;
   if (!initError) return true;
-  if (IS_VERCEL) {
-    console.error("Continuing despite DB init failure in serverless runtime.");
-    return true;
-  }
   res.status(500).json({ error: "Database initialization failed." });
   return false;
 }
@@ -38,6 +34,7 @@ app.get("/menu", async (req, res) => {
     const menu = await db.getMenu();
     res.json(menu);
   } catch (error) {
+    console.error("GET /menu failed:", error);
     res.status(500).json({ error: "Failed to fetch menu." });
   }
 });
@@ -48,6 +45,7 @@ app.get("/appetizers", async (req, res) => {
     const appetizers = await db.getAppetizers();
     res.json(appetizers);
   } catch (error) {
+    console.error("GET /appetizers failed:", error);
     res.status(500).json({ error: "Failed to fetch appetizers." });
   }
 });
@@ -59,6 +57,7 @@ app.get("/orders", async (req, res) => {
     const orders = await db.getOrders(includeCompleted);
     res.json(orders);
   } catch (error) {
+    console.error("GET /orders failed:", error);
     res.status(500).json({ error: "Failed to fetch orders." });
   }
 });
