@@ -14,8 +14,22 @@ const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+let initError = null;
+const initPromise = db.initDatabase().catch((error) => {
+  initError = error;
+  console.error("Failed to initialize database:", error);
+});
+
+async function ensureDatabaseReady(res) {
+  await initPromise;
+  if (!initError) return true;
+  res.status(500).json({ error: "Database initialization failed." });
+  return false;
+}
+
 app.get("/menu", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const menu = await db.getMenu();
     res.json(menu);
   } catch (error) {
@@ -25,6 +39,7 @@ app.get("/menu", async (req, res) => {
 
 app.get("/appetizers", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const appetizers = await db.getAppetizers();
     res.json(appetizers);
   } catch (error) {
@@ -34,6 +49,7 @@ app.get("/appetizers", async (req, res) => {
 
 app.get("/orders", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const includeCompleted = req.query.includeCompleted === "true";
     const orders = await db.getOrders(includeCompleted);
     res.json(orders);
@@ -44,6 +60,7 @@ app.get("/orders", async (req, res) => {
 
 app.post("/orders", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     if (READ_ONLY) {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
@@ -57,6 +74,7 @@ app.post("/orders", async (req, res) => {
 
 app.put("/orders/:id/status", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     if (READ_ONLY) {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
@@ -79,6 +97,7 @@ app.put("/orders/:id/status", async (req, res) => {
 
 app.delete("/orders/:id", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     if (READ_ONLY) {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
@@ -105,6 +124,7 @@ app.delete("/orders/:id", async (req, res) => {
 
 app.get("/stats", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const stats = await db.getStats();
     res.json(stats);
   } catch (error) {
@@ -114,6 +134,7 @@ app.get("/stats", async (req, res) => {
 
 app.post("/reset-day", async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     if (READ_ONLY) {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
@@ -124,19 +145,17 @@ app.post("/reset-day", async (req, res) => {
   }
 });
 
-const initPromise = db.initDatabase();
-
 if (!IS_VERCEL) {
   initPromise
     .then(() => {
+      if (initError) {
+        process.exit(1);
+      }
       app.listen(PORT, () => {
         console.log(`Food order system running at http://localhost:${PORT}`);
       });
     })
-    .catch((error) => {
-      console.error("Failed to initialize database:", error);
-      process.exit(1);
-    });
+    .catch(() => process.exit(1));
 }
 
 module.exports = app;
