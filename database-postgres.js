@@ -57,10 +57,10 @@ const categoriesSeed = [
 ];
 
 const menuSeed = [
-  { category: "Wings", name: "BBQ Wings (6 pcs)", price: 150, prep_time_minutes: 18 },
-  { category: "Wings", name: "Peri Peri Wings (6 pcs)", price: 150, prep_time_minutes: 18 },
-  { category: "Wings", name: "Sweet Chilli Wings (6 pcs)", price: 160, prep_time_minutes: 18 },
-  { category: "Wings", name: "Tandoori Wings (6 pcs)", price: 180, prep_time_minutes: 18 },
+  { category: "Wings", name: "BBQ Wings (6 pcs)", price: 150, prep_time_minutes: 20 },
+  { category: "Wings", name: "Peri Peri Wings (6 pcs)", price: 150, prep_time_minutes: 20 },
+  { category: "Wings", name: "Sweet Chilli Wings (6 pcs)", price: 160, prep_time_minutes: 20 },
+  { category: "Wings", name: "Tandoori Wings (6 pcs)", price: 180, prep_time_minutes: 20 },
 
   { category: "Drumsticks", name: "BBQ Drumsticks (2 pcs)", price: 160, prep_time_minutes: 20 },
   { category: "Drumsticks", name: "Peri Peri Drumsticks (2 pcs)", price: 160, prep_time_minutes: 20 },
@@ -72,21 +72,21 @@ const menuSeed = [
   { category: "Full Leg", name: "Sweet Chilli Tangdi Kebab", price: 240, prep_time_minutes: 20 },
   { category: "Full Leg", name: "Tandoori Tangdi Kebab", price: 260, prep_time_minutes: 20 },
 
-  { category: "Wraps", name: "BBQ Chicken Wrap", price: 130, prep_time_minutes: 8 },
-  { category: "Wraps", name: "Cheese BBQ Wrap", price: 160, prep_time_minutes: 8 },
-  { category: "Wraps", name: "Peri Peri Chicken Wrap", price: 150, prep_time_minutes: 8 },
-  { category: "Wraps", name: "Cheese Peri Peri Wrap", price: 180, prep_time_minutes: 8 },
-  { category: "Wraps", name: "Tandoori Chicken Wrap", price: 170, prep_time_minutes: 8 },
-  { category: "Wraps", name: "Cheese Tandoori Wrap", price: 200, prep_time_minutes: 8 },
+  { category: "Wraps", name: "BBQ Chicken Wrap", price: 130, prep_time_minutes: 10 },
+  { category: "Wraps", name: "Cheese BBQ Wrap", price: 160, prep_time_minutes: 10 },
+  { category: "Wraps", name: "Peri Peri Chicken Wrap", price: 150, prep_time_minutes: 10 },
+  { category: "Wraps", name: "Cheese Peri Peri Wrap", price: 180, prep_time_minutes: 10 },
+  { category: "Wraps", name: "Tandoori Chicken Wrap", price: 170, prep_time_minutes: 10 },
+  { category: "Wraps", name: "Cheese Tandoori Wrap", price: 200, prep_time_minutes: 10 },
   { category: "Wraps", name: "Chicken Sausage Wrap", price: 150, prep_time_minutes: 10 },
   { category: "Wraps", name: "Cheese Sausage Wrap", price: 180, prep_time_minutes: 10 },
 
-  { category: "Sandwiches", name: "BBQ Chicken Sub Sandwich", price: 130, prep_time_minutes: 8 },
-  { category: "Sandwiches", name: "Cheese BBQ Sub Sandwich", price: 160, prep_time_minutes: 8 },
-  { category: "Sandwiches", name: "Peri Peri Sub Sandwich", price: 150, prep_time_minutes: 8 },
-  { category: "Sandwiches", name: "Cheese Peri Peri Sub Sandwich", price: 180, prep_time_minutes: 8 },
-  { category: "Sandwiches", name: "Tandoori Chicken Sub Sandwich", price: 170, prep_time_minutes: 8 },
-  { category: "Sandwiches", name: "Cheese Tandoori Sub Sandwich", price: 200, prep_time_minutes: 8 },
+  { category: "Sandwiches", name: "BBQ Chicken Sub Sandwich", price: 130, prep_time_minutes: 10 },
+  { category: "Sandwiches", name: "Cheese BBQ Sub Sandwich", price: 160, prep_time_minutes: 10 },
+  { category: "Sandwiches", name: "Peri Peri Sub Sandwich", price: 150, prep_time_minutes: 10 },
+  { category: "Sandwiches", name: "Cheese Peri Peri Sub Sandwich", price: 180, prep_time_minutes: 10 },
+  { category: "Sandwiches", name: "Tandoori Chicken Sub Sandwich", price: 170, prep_time_minutes: 10 },
+  { category: "Sandwiches", name: "Cheese Tandoori Sub Sandwich", price: 200, prep_time_minutes: 10 },
 
   { category: "Hot Dogs", name: "Chicken Hotdog", price: 100, prep_time_minutes: 10 },
   { category: "Hot Dogs", name: "Cheese Chicken Hotdog", price: 130, prep_time_minutes: 10 },
@@ -101,17 +101,17 @@ const appetizerGroupsSeed = [
   {
     name: "BBQ Chicken Breast",
     variants: [
-      { portion_name: "Mini", price: 100, prep_time_minutes: 8 },
-      { portion_name: "Half", price: 160, prep_time_minutes: 8 },
-      { portion_name: "Full", price: 300, prep_time_minutes: 8 }
+      { portion_name: "Mini", price: 100, prep_time_minutes: 10 },
+      { portion_name: "Half", price: 160, prep_time_minutes: 10 },
+      { portion_name: "Full", price: 300, prep_time_minutes: 10 }
     ]
   },
   {
     name: "Tandoori Chicken Breast",
     variants: [
-      { portion_name: "Mini", price: 120, prep_time_minutes: 8 },
-      { portion_name: "Half", price: 180, prep_time_minutes: 8 },
-      { portion_name: "Full", price: 340, prep_time_minutes: 8 }
+      { portion_name: "Mini", price: 120, prep_time_minutes: 10 },
+      { portion_name: "Half", price: 180, prep_time_minutes: 10 },
+      { portion_name: "Full", price: 340, prep_time_minutes: 10 }
     ]
   },
   {
@@ -949,3 +949,4 @@ module.exports = {
   deleteOrder,
   query
 };
+
