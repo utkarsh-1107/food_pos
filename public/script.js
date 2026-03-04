@@ -273,9 +273,15 @@ function renderAppetizerRows(appetizers, sectionEl) {
       radio.type = "radio";
       radio.className = "portion-radio";
       radio.name = radioGroupName;
-      radio.value = String(variant.variant_id || variant.id);
+      const hasVariantId = Number.isInteger(Number(variant.variant_id));
+      const isAppetizerVariant = (variant.type || "appetizer") === "appetizer" && hasVariantId;
+      radio.value = String(isAppetizerVariant ? variant.variant_id : variant.id);
       radio.dataset.price = String(variant.price);
-      radio.dataset.groupId = String(variant.group_id || "");
+      radio.dataset.groupId = String(isAppetizerVariant ? variant.group_id || "" : "");
+      radio.dataset.itemType = isAppetizerVariant ? "appetizer" : "menu_item";
+      if (!isAppetizerVariant) {
+        radio.dataset.menuItemId = String(variant.id);
+      }
       if (index === 0) radio.checked = true;
       radio.addEventListener("change", () => {
         updateAppetizerRowPrice(row);
@@ -424,10 +430,23 @@ function collectItems() {
     const quantity = Number(qtyInput?.value) || 0;
     if (!checked || quantity <= 0) return;
 
+    const itemType = checked.dataset.itemType || "appetizer";
+    const groupId = Number(checked.dataset.groupId);
+    if (itemType === "appetizer" && Number.isInteger(groupId) && groupId > 0) {
+      items.push({
+        type: "appetizer",
+        group_id: groupId,
+        variant_id: Number(checked.value),
+        quantity
+      });
+      return;
+    }
+
+    const menuItemId = Number(checked.dataset.menuItemId || checked.value);
+    if (!Number.isInteger(menuItemId) || menuItemId <= 0) return;
     items.push({
-      type: "appetizer",
-      group_id: Number(checked.dataset.groupId),
-      variant_id: Number(checked.value),
+      type: "menu_item",
+      menu_item_id: menuItemId,
       quantity
     });
   });
