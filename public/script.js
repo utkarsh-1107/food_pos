@@ -918,12 +918,9 @@ function removeOrderFromState(orderId) {
 async function setBoardTab(tab) {
   currentBoardTab = tab;
   if (tab === "completed") {
-    const now = Date.now();
-    if (now - lastCompletedFetchAt > COMPLETED_REFRESH_MS) {
-      await fetchOrders(true);
-      lastCompletedFetchAt = now;
-      return;
-    }
+    await fetchOrders(true);
+    lastCompletedFetchAt = Date.now();
+    return;
   }
   renderBoards();
 }
@@ -938,6 +935,17 @@ async function fetchOrders(includeCompleted = false) {
   const endpoint = includeCompleted ? "/orders?includeCompleted=true" : "/orders";
   const response = await fetch(endpoint, { cache: "no-store" });
   const fetchedOrders = await readJsonOrThrow(response, "Failed to fetch orders.");
+
+  if (!includeCompleted) {
+    // Keep completed orders in memory so "Mark Completed" reflects immediately.
+    const preservedCompleted = allOrders.filter((order) => order.status === "completed");
+    const fetchedIds = new Set(fetchedOrders.map((order) => Number(order.id)));
+    preservedCompleted.forEach((order) => {
+      if (!fetchedIds.has(Number(order.id))) {
+        fetchedOrders.push(order);
+      }
+    });
+  }
 
   const withinGrace = Date.now() - lastOptimisticMutationAt < MUTATION_GRACE_MS;
   if (!includeCompleted && withinGrace) {
