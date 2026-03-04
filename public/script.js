@@ -52,8 +52,10 @@ let refreshInProgress = false;
 let eventSource = null;
 let realtimeConnected = false;
 let lastCompletedFetchAt = 0;
+let lastOptimisticMutationAt = 0;
 const touchStartXByOrderId = new Map();
 const COMPLETED_REFRESH_MS = 30000;
+const MUTATION_GRACE_MS = 30000;
 
 const categoryOrder = [
   "Appetizers",
@@ -839,11 +841,11 @@ async function saveOrderChanges() {
   }
 
   upsertOrderInState(payload);
+  lastOptimisticMutationAt = Date.now();
   renderBoards();
   closeEditOrderModal();
   showMessage("Order updated successfully.", "success");
   fetchStats().catch(() => {});
-  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 function renderColumn(targetEl, data) {
@@ -935,7 +937,24 @@ async function fetchMenu() {
 async function fetchOrders(includeCompleted = false) {
   const endpoint = includeCompleted ? "/orders?includeCompleted=true" : "/orders";
   const response = await fetch(endpoint, { cache: "no-store" });
-  allOrders = await readJsonOrThrow(response, "Failed to fetch orders.");
+  const fetchedOrders = await readJsonOrThrow(response, "Failed to fetch orders.");
+
+  const withinGrace = Date.now() - lastOptimisticMutationAt < MUTATION_GRACE_MS;
+  if (!includeCompleted && withinGrace) {
+    const merged = [...fetchedOrders];
+    const fetchedIds = new Set(fetchedOrders.map((order) => Number(order.id)));
+    allOrders
+      .filter((order) => order.status !== "completed")
+      .forEach((order) => {
+        const id = Number(order.id);
+        if (!fetchedIds.has(id)) {
+          merged.push(order);
+        }
+      });
+    allOrders = merged;
+  } else {
+    allOrders = fetchedOrders;
+  }
   renderBoards();
 }
 
@@ -984,11 +1003,11 @@ async function createOrder(event) {
   const payload = await readJsonOrThrow(response, "Failed to create order.");
 
   upsertOrderInState(payload);
+  lastOptimisticMutationAt = Date.now();
   renderBoards();
   showMessage(`Order created successfully. Token #${payload.token_number}`, "success");
   clearForm();
   fetchStats().catch(() => {});
-  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function updateStatus(orderId, status) {
@@ -996,6 +1015,7 @@ async function updateStatus(orderId, status) {
   const previousStatus = target ? target.status : null;
   if (target) {
     target.status = status;
+    lastOptimisticMutationAt = Date.now();
     renderBoards();
   }
 
@@ -1008,9 +1028,9 @@ async function updateStatus(orderId, status) {
   try {
     const updated = await readJsonOrThrow(response, "Failed to update status.");
     upsertOrderInState(updated);
+    lastOptimisticMutationAt = Date.now();
     renderBoards();
     fetchStats().catch(() => {});
-    fetchOrders(currentBoardTab === "completed").catch(() => {});
   } catch (error) {
     if (target && previousStatus) {
       target.status = previousStatus;
@@ -1028,10 +1048,10 @@ async function resetDay() {
   const payload = await readJsonOrThrow(response, "Failed to reset day.");
 
   allOrders = [];
+  lastOptimisticMutationAt = Date.now();
   renderBoards();
   showMessage(`Day reset complete. Deleted ${payload.deleted_orders} orders.`, "success");
   fetchStats().catch(() => {});
-  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function deleteOrder(orderId) {
@@ -1071,10 +1091,10 @@ async function deleteOrder(orderId) {
 
   cachedAdminPin = pin;
   removeOrderFromState(orderId);
+  lastOptimisticMutationAt = Date.now();
   renderBoards();
   showMessage("Order deleted successfully.", "success");
   fetchStats().catch(() => {});
-  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function refreshDashboard() {
