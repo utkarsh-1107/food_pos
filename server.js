@@ -433,11 +433,15 @@ function renderInvoiceDocument(content, { title = "Invoice", autoPrint = false }
           .invoice-header { flex-direction: column; }
         }
         @media print {
-          body { background: #fff; padding: 0; }
-          .invoice-sheet { box-shadow: none; border-radius: 0; margin: 0 0 10mm; border: 1px solid #e5e7eb; }
+          body { background: #f7f7f7; padding: 0; }
+          .invoice-sheet { margin: 0 0 10mm; }
           .print-btn { display: none; }
           .invoice-sheet { page-break-after: always; }
           .invoice-sheet:last-child { page-break-after: auto; }
+          * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       </style>
     </head>
@@ -716,13 +720,17 @@ app.get("/reports/daily-close/pdf", async (req, res) => {
 app.get("/invoices/:id/print", async (req, res) => {
   try {
     if (!(await ensureDatabaseReady(res))) return;
-    const orderId = Number(req.params.id);
-    if (!Number.isInteger(orderId) || orderId <= 0) {
-      return res.status(400).send("Invalid order id.");
+    const requested = Number(req.params.id);
+    if (!Number.isInteger(requested) || requested <= 0) {
+      return res.status(400).send("Invalid order id or token.");
     }
-    const order = await db.getOrderById(orderId);
+    let order = await db.getOrderById(requested);
     if (!order) {
-      return res.status(404).send("Order not found.");
+      const todaysOrders = await db.getOrders(true);
+      order = todaysOrders.find((entry) => Number(entry.token_number) === requested) || null;
+    }
+    if (!order) {
+      return res.status(404).send("Order not found for the provided id/token.");
     }
     const autoPrint = String(req.query.autoprint || "").toLowerCase() === "true";
     const html = renderInvoiceDocument(renderInvoiceHtml(order), {
