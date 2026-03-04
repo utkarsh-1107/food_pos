@@ -11,6 +11,12 @@ const SKIP_DB_INIT = ["1", "true"].includes(String(process.env.SKIP_DB_INIT || "
 const READ_ONLY = ["1", "true"].includes(String(process.env.READ_ONLY || "").toLowerCase());
 const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
 const sseClients = new Set();
+const runtimeCache = {
+  menu: null,
+  menuExpiresAt: 0,
+  stats: null,
+  statsExpiresAt: 0
+};
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -40,6 +46,13 @@ function broadcastEvent(type, payload = {}) {
       sseClients.delete(client);
     }
   }
+}
+
+function invalidateRuntimeCache() {
+  runtimeCache.menu = null;
+  runtimeCache.menuExpiresAt = 0;
+  runtimeCache.stats = null;
+  runtimeCache.statsExpiresAt = 0;
 }
 
 app.get("/health", async (req, res) => {
@@ -88,7 +101,16 @@ app.get("/events", async (req, res) => {
 app.get("/menu", async (req, res) => {
   try {
     if (!(await ensureDatabaseReady(res))) return;
+    const now = Date.now();
+    if (runtimeCache.menu && runtimeCache.menuExpiresAt > now) {
+      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=600");
+      return res.json(runtimeCache.menu);
+    }
+
     const menu = await db.getMenu();
+    runtimeCache.menu = menu;
+    runtimeCache.menuExpiresAt = now + 5 * 60 * 1000;
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=600");
     res.json(menu);
   } catch (error) {
     console.error("GET /menu failed:", error);
@@ -115,6 +137,7 @@ app.get("/orders", async (req, res) => {
     if (!(await ensureDatabaseReady(res))) return;
     const includeCompleted = req.query.includeCompleted === "true";
     const orders = await db.getOrders(includeCompleted);
+    res.setHeader("Cache-Control", "no-store");
     res.json(orders);
   } catch (error) {
     console.error("GET /orders failed:", error);
@@ -155,6 +178,7 @@ app.post("/orders", async (req, res) => {
       customer_address,
       order_notes
     });
+    invalidateRuntimeCache();
     broadcastEvent("orders_changed", { action: "created", order_id: order.id });
     res.status(201).json(order);
   } catch (error) {
@@ -179,6 +203,7 @@ app.put("/orders/:id/status", async (req, res) => {
       return res.status(404).json({ error: "Order not found." });
     }
 
+    invalidateRuntimeCache();
     broadcastEvent("orders_changed", { action: "status_updated", order_id: orderId, status });
     return res.json(updated);
   } catch (error) {
@@ -204,6 +229,7 @@ app.put("/orders/:id/edit", async (req, res) => {
       return res.status(404).json({ error: "Order not found." });
     }
 
+    invalidateRuntimeCache();
     broadcastEvent("orders_changed", { action: "edited", order_id: orderId });
     return res.json(updated);
   } catch (error) {
@@ -232,6 +258,7 @@ app.delete("/orders/:id", async (req, res) => {
       return res.status(404).json({ error: "Order not found." });
     }
 
+    invalidateRuntimeCache();
     broadcastEvent("orders_changed", { action: "deleted", order_id: orderId });
     return res.json({ message: "Order deleted." });
   } catch (error) {
@@ -242,7 +269,16 @@ app.delete("/orders/:id", async (req, res) => {
 app.get("/stats", async (req, res) => {
   try {
     if (!(await ensureDatabaseReady(res))) return;
+    const now = Date.now();
+    if (runtimeCache.stats && runtimeCache.statsExpiresAt > now) {
+      res.setHeader("Cache-Control", "no-store");
+      return res.json(runtimeCache.stats);
+    }
+
     const stats = await db.getStats();
+    runtimeCache.stats = stats;
+    runtimeCache.statsExpiresAt = now + 2 * 1000;
+    res.setHeader("Cache-Control", "no-store");
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch stats." });
@@ -266,6 +302,7 @@ app.post("/reset-day", async (req, res) => {
       return res.status(405).json({ error: "Read-only mode is enabled." });
     }
     const result = await db.resetDay();
+    invalidateRuntimeCache();
     broadcastEvent("orders_changed", { action: "reset_day" });
     res.json({ message: "Day reset complete.", ...result });
   } catch (error) {

@@ -50,7 +50,10 @@ let paymentFilter = "";
 let orderTypeFilter = "";
 let refreshInProgress = false;
 let eventSource = null;
+let realtimeConnected = false;
+let lastCompletedFetchAt = 0;
 const touchStartXByOrderId = new Map();
+const COMPLETED_REFRESH_MS = 30000;
 
 const categoryOrder = [
   "Appetizers",
@@ -893,25 +896,34 @@ function renderBoards() {
   }
 }
 
-function setBoardTab(tab) {
+async function setBoardTab(tab) {
   currentBoardTab = tab;
+  if (tab === "completed") {
+    const now = Date.now();
+    if (now - lastCompletedFetchAt > COMPLETED_REFRESH_MS) {
+      await fetchOrders(true);
+      lastCompletedFetchAt = now;
+      return;
+    }
+  }
   renderBoards();
 }
 
 async function fetchMenu() {
-  const response = await fetch("/menu");
+  const response = await fetch("/menu", { cache: "force-cache" });
   menuItems = await readJsonOrThrow(response, "Failed to fetch menu.");
   renderMenu();
 }
 
-async function fetchOrders() {
-  const response = await fetch("/orders?includeCompleted=true");
+async function fetchOrders(includeCompleted = false) {
+  const endpoint = includeCompleted ? "/orders?includeCompleted=true" : "/orders";
+  const response = await fetch(endpoint, { cache: "no-store" });
   allOrders = await readJsonOrThrow(response, "Failed to fetch orders.");
   renderBoards();
 }
 
 async function fetchStats() {
-  const response = await fetch("/stats");
+  const response = await fetch("/stats", { cache: "no-store" });
   const stats = await readJsonOrThrow(response, "Failed to fetch stats.");
   statOrders.textContent = String(stats.total_orders || 0);
   statCash.textContent = formatCurrency(stats.cash_total || 0);
@@ -1025,7 +1037,11 @@ async function refreshDashboard() {
   if (refreshInProgress) return;
   refreshInProgress = true;
   try {
-    await Promise.all([fetchOrders(), fetchStats()]);
+    const includeCompleted = currentBoardTab === "completed";
+    await Promise.all([fetchOrders(includeCompleted), fetchStats()]);
+    if (includeCompleted) {
+      lastCompletedFetchAt = Date.now();
+    }
   } finally {
     refreshInProgress = false;
   }
@@ -1078,6 +1094,9 @@ async function fetchDailyCloseReport() {
 function connectRealtimeEvents() {
   if (eventSource) return;
   eventSource = new EventSource("/events");
+  eventSource.onopen = () => {
+    realtimeConnected = true;
+  };
   eventSource.addEventListener("orders_changed", async () => {
     try {
       await refreshDashboard();
@@ -1086,6 +1105,7 @@ function connectRealtimeEvents() {
     }
   });
   eventSource.onerror = () => {
+    realtimeConnected = false;
     if (eventSource) {
       eventSource.close();
       eventSource = null;
@@ -1101,8 +1121,7 @@ async function verifyBackendHealth() {
 
 async function init() {
   try {
-    await fetchMenu();
-    await refreshDashboard();
+    await Promise.all([fetchMenu(), refreshDashboard()]);
     connectRealtimeEvents();
 
     orderForm.addEventListener("submit", async (event) => {
@@ -1113,12 +1132,20 @@ async function init() {
       }
     });
 
-    activeTabBtn.addEventListener("click", () => {
-      setBoardTab("active");
+    activeTabBtn.addEventListener("click", async () => {
+      try {
+        await setBoardTab("active");
+      } catch (error) {
+        showMessage(error.message, "error");
+      }
     });
 
-    completedTabBtn.addEventListener("click", () => {
-      setBoardTab("completed");
+    completedTabBtn.addEventListener("click", async () => {
+      try {
+        await setBoardTab("completed");
+      } catch (error) {
+        showMessage(error.message, "error");
+      }
     });
 
     if (orderSearchInput) {
@@ -1206,12 +1233,13 @@ async function init() {
     }
 
     setInterval(async () => {
+      if (realtimeConnected) return;
       try {
         await refreshDashboard();
       } catch (error) {
         showMessage(error.message, "error");
       }
-    }, 5000);
+    }, 10000);
   } catch (error) {
     showMessage(error.message, "error");
   }
