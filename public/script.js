@@ -838,9 +838,12 @@ async function saveOrderChanges() {
     throw new Error(payload.error || "Failed to save order changes.");
   }
 
+  upsertOrderInState(payload);
+  renderBoards();
   closeEditOrderModal();
   showMessage("Order updated successfully.", "success");
-  await Promise.all([fetchOrders(), fetchStats()]);
+  fetchStats().catch(() => {});
+  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 function renderColumn(targetEl, data) {
@@ -894,6 +897,20 @@ function renderBoards() {
     completedTabBtn.classList.remove("active");
     activeTabBtn.classList.add("active");
   }
+}
+
+function upsertOrderInState(order) {
+  if (!order || !Number.isInteger(Number(order.id))) return;
+  const index = allOrders.findIndex((entry) => Number(entry.id) === Number(order.id));
+  if (index >= 0) {
+    allOrders[index] = order;
+  } else {
+    allOrders.push(order);
+  }
+}
+
+function removeOrderFromState(orderId) {
+  allOrders = allOrders.filter((entry) => Number(entry.id) !== Number(orderId));
 }
 
 async function setBoardTab(tab) {
@@ -966,20 +983,41 @@ async function createOrder(event) {
 
   const payload = await readJsonOrThrow(response, "Failed to create order.");
 
+  upsertOrderInState(payload);
+  renderBoards();
   showMessage(`Order created successfully. Token #${payload.token_number}`, "success");
   clearForm();
-  await Promise.all([fetchOrders(), fetchStats()]);
+  fetchStats().catch(() => {});
+  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function updateStatus(orderId, status) {
+  const target = allOrders.find((entry) => Number(entry.id) === Number(orderId));
+  const previousStatus = target ? target.status : null;
+  if (target) {
+    target.status = status;
+    renderBoards();
+  }
+
   const response = await fetch(`/orders/${orderId}/status`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status })
   });
 
-  await readJsonOrThrow(response, "Failed to update status.");
-  await Promise.all([fetchOrders(), fetchStats()]);
+  try {
+    const updated = await readJsonOrThrow(response, "Failed to update status.");
+    upsertOrderInState(updated);
+    renderBoards();
+    fetchStats().catch(() => {});
+    fetchOrders(currentBoardTab === "completed").catch(() => {});
+  } catch (error) {
+    if (target && previousStatus) {
+      target.status = previousStatus;
+      renderBoards();
+    }
+    throw error;
+  }
 }
 
 async function resetDay() {
@@ -989,8 +1027,11 @@ async function resetDay() {
   const response = await fetch("/reset-day", { method: "POST" });
   const payload = await readJsonOrThrow(response, "Failed to reset day.");
 
+  allOrders = [];
+  renderBoards();
   showMessage(`Day reset complete. Deleted ${payload.deleted_orders} orders.`, "success");
-  await Promise.all([fetchOrders(), fetchStats()]);
+  fetchStats().catch(() => {});
+  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function deleteOrder(orderId) {
@@ -1029,8 +1070,11 @@ async function deleteOrder(orderId) {
   }
 
   cachedAdminPin = pin;
+  removeOrderFromState(orderId);
+  renderBoards();
   showMessage("Order deleted successfully.", "success");
-  await Promise.all([fetchOrders(), fetchStats()]);
+  fetchStats().catch(() => {});
+  fetchOrders(currentBoardTab === "completed").catch(() => {});
 }
 
 async function refreshDashboard() {
@@ -1246,3 +1290,5 @@ async function init() {
 }
 
 init();
+
+
