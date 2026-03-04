@@ -276,8 +276,7 @@ function renderInvoiceHtml(order, { includePrintButton = true } = {}) {
           <p class="subtitle">ORDER INVOICE</p>
         </div>
         <div class="meta">
-          <p><strong>Order ID:</strong> #${order.id}</p>
-          <p><strong>Token:</strong> #${order.token_number}</p>
+          <p><strong>Order No.:</strong> #${order.token_number}</p>
           <p><strong>Date:</strong> ${escapeHtml(formatInvoiceDate(order.created_at))}</p>
         </div>
       </header>

@@ -1200,24 +1200,29 @@ async function fetchDailyCloseReport() {
   }
 }
 
+function openUrlInNewTabOnly(url) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function openInvoicePrint(orderId) {
   const id = Number(orderId);
   if (!Number.isInteger(id) || id <= 0) {
     throw new Error("Invalid Order ID.");
   }
   const url = `/invoices/${id}/print`;
-  const popup = window.open(url, "_blank", "noopener,noreferrer");
-  if (!popup) {
-    window.location.href = url;
-  }
+  openUrlInNewTabOnly(url);
 }
 
 function openCompletedInvoicesPrint() {
   const url = "/invoices/completed/today/print";
-  const popup = window.open(url, "_blank", "noopener,noreferrer");
-  if (!popup) {
-    window.location.href = url;
-  }
+  openUrlInNewTabOnly(url);
 }
 
 function connectRealtimeEvents() {
