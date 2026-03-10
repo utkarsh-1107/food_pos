@@ -154,6 +154,32 @@ function todayIN() {
   return toINDateTime().slice(0, 10);
 }
 
+function normalizeDateOnly(value) {
+  if (!value) return todayIN();
+  if (value instanceof Date) {
+    return toINDateTime(value).slice(0, 10);
+  }
+  const asString = String(value).trim();
+  const isoMatch = asString.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const parsed = new Date(asString);
+  if (!Number.isNaN(parsed.getTime())) {
+    return toINDateTime(parsed).slice(0, 10);
+  }
+  return todayIN();
+}
+
+function normalizeDateTime(value) {
+  if (!value) return toINDateTime();
+  if (value instanceof Date) return toINDateTime(value);
+  const asString = String(value).trim();
+  const direct = asString.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+  if (direct) return `${direct[1]} ${direct[2]}`;
+  const parsed = new Date(asString);
+  if (!Number.isNaN(parsed.getTime())) return toINDateTime(parsed);
+  return toINDateTime();
+}
+
 function normalizeCreatedAt(value) {
   if (!value) return value;
 
@@ -563,8 +589,8 @@ async function createOrder(
     const nowInIN = await get(
       "SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata') AS created_at_in, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS order_date_in"
     );
-    const orderDate = String(nowInIN?.order_date_in || todayIN()).slice(0, 10);
-    const createdAt = String(nowInIN?.created_at_in || toINDateTime()).replace("T", " ").slice(0, 19);
+    const orderDate = normalizeDateOnly(nowInIN?.order_date_in);
+    const createdAt = normalizeDateTime(nowInIN?.created_at_in);
 
     const tokenRow = await get(
       "SELECT COALESCE(MAX(token_number), 0) + 1 AS next_token FROM orders WHERE order_date = $1",
