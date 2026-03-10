@@ -1,4 +1,8 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
+
+// Keep DATE/TIMESTAMP textual to avoid implicit UTC/local conversions on serverless runtimes.
+types.setTypeParser(1082, (value) => value); // date
+types.setTypeParser(1114, (value) => value); // timestamp without time zone
 
 const useSSL =
   ["1", "true"].includes(String(process.env.PGSSL || "").toLowerCase()) || Boolean(process.env.VERCEL);
@@ -586,9 +590,11 @@ async function createOrder(
 
   await run("BEGIN");
   try {
-    const nowInIN = await get(
-      "SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata') AS created_at_in, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS order_date_in"
-    );
+    const nowInIN = await get(`
+      SELECT
+        to_char(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI:SS') AS created_at_in,
+        to_char((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD') AS order_date_in
+    `);
     const orderDate = normalizeDateOnly(nowInIN?.order_date_in);
     const createdAt = normalizeDateTime(nowInIN?.created_at_in);
 
