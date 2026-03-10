@@ -46,6 +46,10 @@ const initPromise = (SKIP_DB_INIT ? Promise.resolve() : db.initDatabase()).catch
 async function ensureDatabaseReady(res) {
   await initPromise;
   if (!initError) return true;
+  if (IS_VERCEL && dbClient === "postgres") {
+    // In serverless, init can fail transiently; allow request path to attempt live queries.
+    return true;
+  }
   res.status(500).json({
     error: "Database initialization failed.",
     detail: initError.message || String(initError)
@@ -498,16 +502,8 @@ app.get("/events", async (req, res) => {
 app.get("/menu", async (req, res) => {
   try {
     if (!(await ensureDatabaseReady(res))) return;
-    const now = Date.now();
-    if (runtimeCache.menu && runtimeCache.menuExpiresAt > now) {
-      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=600");
-      return res.json(runtimeCache.menu);
-    }
-
     const menu = await db.getMenu();
-    runtimeCache.menu = menu;
-    runtimeCache.menuExpiresAt = now + 5 * 60 * 1000;
-    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control", "no-store");
     res.json(menu);
   } catch (error) {
     console.error("GET /menu failed:", error);

@@ -55,6 +55,7 @@ let eventSource = null;
 let realtimeConnected = false;
 let lastCompletedFetchAt = 0;
 let lastOptimisticMutationAt = 0;
+let createOrderInProgress = false;
 const touchStartXByOrderId = new Map();
 const COMPLETED_REFRESH_MS = 30000;
 const MUTATION_GRACE_MS = 30000;
@@ -460,6 +461,9 @@ function clearForm() {
   const inputs = menuContainer.querySelectorAll("input[type='number']");
   inputs.forEach((input) => {
     input.value = "0";
+    const qtyStepper = input.closest(".qty-stepper");
+    const valueEl = qtyStepper ? qtyStepper.querySelector(".qty-value") : null;
+    if (valueEl) valueEl.textContent = "0";
   });
 
   const radioGroups = new Set();
@@ -959,7 +963,7 @@ async function setBoardTab(tab) {
 }
 
 async function fetchMenu() {
-  const response = await fetch("/menu", { cache: "force-cache" });
+  const response = await fetch("/menu", { cache: "no-store" });
   menuItems = await readJsonOrThrow(response, "Failed to fetch menu.");
   renderMenu();
 }
@@ -1010,6 +1014,7 @@ async function fetchStats() {
 
 async function createOrder(event) {
   event.preventDefault();
+  if (createOrderInProgress) return;
   const items = collectItems();
   if (items.length === 0) {
     showMessage("Please select at least one item.", "error");
@@ -1027,28 +1032,36 @@ async function createOrder(event) {
   const customerName = customerNameInput.value.trim();
   const customerAddress = customerAddressInput ? customerAddressInput.value.trim() : "";
   const orderNotes = orderNotesInput ? orderNotesInput.value.trim() : "";
+  const submitBtn = orderForm.querySelector("button[type='submit']");
 
-  const response = await fetch("/orders", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      items,
-      payment_mode: paymentMode,
-      order_type: orderType,
-      customer_name: customerName,
-      customer_address: customerAddress,
-      order_notes: orderNotes
-    })
-  });
+  createOrderInProgress = true;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const response = await fetch("/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items,
+        payment_mode: paymentMode,
+        order_type: orderType,
+        customer_name: customerName,
+        customer_address: customerAddress,
+        order_notes: orderNotes
+      })
+    });
 
-  const payload = await readJsonOrThrow(response, "Failed to create order.");
+    const payload = await readJsonOrThrow(response, "Failed to create order.");
 
-  upsertOrderInState(payload);
-  lastOptimisticMutationAt = Date.now();
-  renderBoards();
-  showMessage(`Order created successfully. Token #${payload.token_number}`, "success");
-  clearForm();
-  fetchStats().catch(() => {});
+    upsertOrderInState(payload);
+    lastOptimisticMutationAt = Date.now();
+    renderBoards();
+    showMessage(`Order created successfully. Token #${payload.token_number}`, "success");
+    clearForm();
+    fetchStats().catch(() => {});
+  } finally {
+    createOrderInProgress = false;
+    if (submitBtn) submitBtn.disabled = false;
+  }
 }
 
 async function updateStatus(orderId, status) {
