@@ -79,14 +79,16 @@ function formatCurrency(value) {
 function formatTime(timestamp, orderDate = "") {
   if (!timestamp) return "";
 
-  const raw = String(timestamp);
-  const directMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
-  if (directMatch) {
-    const datePart = String(orderDate || "").match(/^\d{4}-\d{2}-\d{2}$/) ? String(orderDate) : directMatch[1];
-    return `${datePart} ${directMatch[2]}`;
+  const raw = String(timestamp).trim();
+  let parsed;
+
+  // Treat plain SQL timestamps as UTC from the DB driver, then display in IST.
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+    parsed = new Date(raw.replace(" ", "T") + "Z");
+  } else {
+    parsed = new Date(raw);
   }
 
-  const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) {
     return raw;
   }
@@ -103,8 +105,10 @@ function formatTime(timestamp, orderDate = "") {
   }).format(parsed);
 
   const [d, t] = formatted.split(", ");
-  const [day, month, year] = d.split("/");
-  return `${year}-${month}-${day} ${t}`;
+  const [day, month, year] = String(d || "").split("/");
+  const parsedDatePart = `${year}-${month}-${day}`;
+  const datePart = String(orderDate || "").match(/^\d{4}-\d{2}-\d{2}$/) ? String(orderDate) : parsedDatePart;
+  return `${datePart} ${t}`;
 }
 
 function formatOrderType(orderType) {
