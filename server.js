@@ -23,9 +23,11 @@ const db = usePostgres ? require("./database-postgres") : require("./database");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const SKIP_DB_INIT = ["1", "true"].includes(String(process.env.SKIP_DB_INIT || "").toLowerCase());
 const READ_ONLY = ["1", "true"].includes(String(process.env.READ_ONLY || "").toLowerCase());
 const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+const explicitSkipInit = ["1", "true"].includes(String(process.env.SKIP_DB_INIT || "").toLowerCase());
+// On Vercel+Postgres, cold starts should not run full schema/seed init (can hit statement timeout).
+const SKIP_DB_INIT = explicitSkipInit || (IS_VERCEL && dbClient === "postgres");
 const sseClients = new Set();
 const runtimeCache = {
   menu: null,
