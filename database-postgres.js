@@ -162,10 +162,9 @@ function normalizeCreatedAt(value) {
   }
 
   const asString = String(value);
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(asString)) {
-    return asString;
-  }
 
+  // Postgres can return timestamp strings in server-local timezone context.
+  // Always parse and render explicitly in Asia/Kolkata for UI consistency.
   const parsed = new Date(asString);
   if (!Number.isNaN(parsed.getTime())) {
     return toINDateTime(parsed);
