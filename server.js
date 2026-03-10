@@ -265,12 +265,30 @@ function escapeHtml(text) {
 
 function formatInvoiceDate(raw) {
   if (!raw) return "";
-  const parsed = new Date(String(raw).replace(" ", "T"));
-  if (Number.isNaN(parsed.getTime())) return String(raw);
+  const asString = String(raw).trim();
+
+  // Most rows store IST local datetime without timezone.
+  // Treat these as already-correct local business time (do not convert again).
+  const localMatch = asString.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/);
+  if (localMatch) {
+    const [, year, month, day, hour, minute] = localMatch;
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const hour24 = Number(hour);
+    const hour12 = hour24 % 12 || 12;
+    const ampm = hour24 >= 12 ? "pm" : "am";
+    return `${Number(day)} ${monthNames[Number(month) - 1]} ${year}, ${hour12}:${minute} ${ampm}`;
+  }
+
+  const parsed = new Date(asString);
+  if (Number.isNaN(parsed.getTime())) return asString;
+
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: "Asia/Kolkata",
-    dateStyle: "medium",
-    timeStyle: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     hour12: true
   }).format(parsed);
 }
