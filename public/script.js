@@ -76,13 +76,14 @@ function formatCurrency(value) {
   return `Rs ${Number(value).toFixed(2)}`;
 }
 
-function formatTime(timestamp) {
+function formatTime(timestamp, orderDate = "") {
   if (!timestamp) return "";
 
   const raw = String(timestamp);
   const directMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
   if (directMatch) {
-    return `${directMatch[1]} ${directMatch[2]}`;
+    const datePart = String(orderDate || "").match(/^\d{4}-\d{2}-\d{2}$/) ? String(orderDate) : directMatch[1];
+    return `${datePart} ${directMatch[2]}`;
   }
 
   const parsed = new Date(raw);
@@ -510,7 +511,7 @@ function renderOrderCard(order) {
     <p class="order-meta">Payment: ${order.payment_mode.toUpperCase()}</p>
     <p class="order-meta">Type: ${formatOrderType(order.order_type)}</p>
     ${customerMeta}
-    <p class="order-meta">Time: ${formatTime(order.created_at)}</p>
+    <p class="order-meta">Time: ${formatTime(order.created_at, order.order_date)}</p>
   `;
 
   const nextStatus = getNextStatus(order.status);
@@ -602,7 +603,7 @@ function openOrderPreview(order) {
     <p><strong>Payment:</strong> ${escapeHtml(String(order.payment_mode || "").toUpperCase())}</p>
     <p><strong>Order Type:</strong> ${formatOrderType(order.order_type)}</p>
     <p><strong>Total:</strong> ${formatCurrency(order.total_amount)}</p>
-    <p><strong>Time:</strong> ${formatTime(order.created_at)}</p>
+    <p><strong>Time:</strong> ${formatTime(order.created_at, order.order_date)}</p>
     <p><strong>Customer:</strong> ${customer}</p>
     <p><strong>Address:</strong> ${address}</p>
     <p><strong>Notes:</strong> ${notes}</p>

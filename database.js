@@ -516,7 +516,7 @@ async function getAppetizers() {
 
 async function fetchOrderRows(includeCompleted = false) {
   let sql = `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at, date(created_at) AS order_date
     , customer_address, order_notes
     FROM orders
     WHERE date(created_at) = ?
@@ -590,7 +590,7 @@ async function getOrders(includeCompleted = false) {
 async function getOrderById(orderId) {
   const row = await get(
     `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, status, created_at, date(created_at) AS order_date
     , customer_address, order_notes
     FROM orders
     WHERE id = ?
@@ -776,7 +776,8 @@ async function createOrder({
         customer_address: cleanCustomerAddress || null,
         order_notes: cleanOrderNotes || null,
         status: "queued",
-        created_at: createdAt
+        created_at: createdAt,
+        order_date: createdAt.slice(0, 10)
       }
     ]);
     return createdOrder;
@@ -795,7 +796,7 @@ async function updateOrderStatus(orderId, nextStatus) {
 
   const row = await get(
     `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at, date(created_at) AS order_date
     FROM orders
     WHERE id = ?
     `,

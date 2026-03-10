@@ -175,9 +175,16 @@ function normalizeCreatedAt(value) {
 }
 
 function normalizeOrderRow(order) {
+  let normalizedOrderDate = order.order_date;
+  if (normalizedOrderDate instanceof Date) {
+    normalizedOrderDate = toINDateTime(normalizedOrderDate).slice(0, 10);
+  } else if (normalizedOrderDate != null) {
+    normalizedOrderDate = String(normalizedOrderDate).slice(0, 10);
+  }
   return {
     ...order,
-    created_at: normalizeCreatedAt(order.created_at)
+    created_at: normalizeCreatedAt(order.created_at),
+    order_date: normalizedOrderDate
   };
 }
 
@@ -444,7 +451,7 @@ async function getAppetizers() {
 
 async function fetchOrderRows(includeCompleted = false) {
   let sql = `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at, order_date
     FROM orders
     WHERE order_date = $1
   `;
@@ -520,7 +527,7 @@ async function getOrders(includeCompleted = false) {
 async function getOrderById(orderId) {
   const row = await get(
     `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at, order_date
     FROM orders
     WHERE id = $1
     `,
@@ -683,7 +690,8 @@ async function createOrder(
         customer_address: cleanCustomerAddress || null,
         order_notes: cleanOrderNotes || null,
         status: "queued",
-        created_at: createdAt
+        created_at: createdAt,
+        order_date: orderDate
       }
     ]);
     return createdOrder;
@@ -710,7 +718,7 @@ async function updateOrderStatus(orderId, nextStatus) {
 
   const row = await get(
     `
-    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at
+    SELECT id, token_number, total_amount, payment_mode, order_type, customer_name, customer_address, order_notes, status, created_at, order_date
     FROM orders
     WHERE id = $1
     `,
